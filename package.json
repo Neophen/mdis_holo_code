@@ -24,7 +24,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "release": "npm version ${npm_config_bump:-patch} && git push && git push --tags && gh release create v$(node -p \"require('./package.json').version\") --notes-file CHANGELOG.md"
+    "release": "npm version ${npm_config_bump:-patch} && git push && git push --tags && gh release create v$(node -p \"require('./package.json').version\") --notes \"$(node scripts/extract-changelog.js)\""
   },
   "devDependencies": {
     "@types/vscode": "^1.75.0",
