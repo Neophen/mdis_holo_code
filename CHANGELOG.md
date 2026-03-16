@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.9
+
+### Improvements
+- Consolidated release automation into single script
+
 ## 0.4.8
 
 ### Improvements
