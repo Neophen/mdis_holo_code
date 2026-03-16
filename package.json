@@ -1,10 +1,11 @@
 {
   "name": "vscode-hologram",
   "displayName": "Hologram",
-  "description": "Syntax highlighting and Go to Definition for the Hologram framework template language",
+  "description": "Syntax highlighting, intelligent autocomplete, diagnostics, and Go to Definition for the Hologram framework",
   "version": "0.4.3",
   "publisher": "MDIS",
   "license": "MIT",
+  "icon": "assets/logo.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Neophen/vscode-hologram"
