@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { findEnclosingModule, resolveComponentName } from './hologramResolver';
+import { findEnclosingModuleName, resolveComponentName } from './hologramResolver';
 import { WorkspaceIndex } from './workspaceIndex';
 
 interface EventType {
@@ -28,241 +28,6 @@ const DEFAULT_EVENT_TYPES: EventType[] = [
 function getEventTypes(): EventType[] {
   const config = vscode.workspace.getConfiguration('hologram');
   return config.get<EventType[]>('eventTypes', DEFAULT_EVENT_TYPES);
-}
-
-interface ActionInfo {
-  name: string;
-  usesParams: boolean;
-  params: string[];
-}
-
-interface CommandInfo {
-  name: string;
-  usesParams: boolean;
-  params: string[];
-}
-
-export interface PropInfo {
-  name: string;
-  type: string;
-}
-
-export interface StateInfo {
-  name: string;
-  source: 'put_state' | 'init';
-}
-
-export interface ModuleMembers {
-  actions: ActionInfo[];
-  commands: CommandInfo[];
-  props: PropInfo[];
-  stateKeys: StateInfo[];
-}
-
-export function scanModuleMembers(
-  document: vscode.TextDocument,
-  moduleRange: { start: number; end: number }
-): ModuleMembers {
-  const actions: ActionInfo[] = [];
-  const commands: CommandInfo[] = [];
-  const props: PropInfo[] = [];
-  const stateKeysSet = new Map<string, StateInfo>();
-
-  const text = document.getText();
-  const lines = text.split('\n');
-
-  for (let i = moduleRange.start; i <= moduleRange.end; i++) {
-    const line = lines[i];
-    if (!line) continue;
-
-    // prop :name, :type or prop(:name, ModuleName)
-    const propMatch = line.match(/^\s*prop[\s(]+:(\w+)(?:\s*,\s*:?(\w[\w.]*))?/);
-    if (propMatch) {
-      const propType = propMatch[2] || 'any';
-      props.push({ name: propMatch[1], type: propType });
-      continue;
-    }
-
-    // def action(:name, params, component) do
-    const actionMatch = line.match(/^\s*def\s+action\s*\(\s*:(\w+)\s*,\s*(\w+)/);
-    if (actionMatch) {
-      const actionName = actionMatch[1];
-      const paramsVar = actionMatch[2];
-      const body = extractFunctionBody(lines, i, moduleRange.end);
-      const usesParams = checkUsesParams(body, paramsVar);
-      const params = usesParams ? extractParamKeys(body, paramsVar) : [];
-      actions.push({ name: actionName, usesParams, params });
-      continue;
-    }
-
-    // def command(:name, params, server) do
-    const commandMatch = line.match(/^\s*def\s+command\s*\(\s*:(\w+)\s*,\s*(\w+)/);
-    if (commandMatch) {
-      const commandName = commandMatch[1];
-      const paramsVar = commandMatch[2];
-      const body = extractFunctionBody(lines, i, moduleRange.end);
-      const usesParams = checkUsesParams(body, paramsVar);
-      const params = usesParams ? extractParamKeys(body, paramsVar) : [];
-      commands.push({ name: commandName, usesParams, params });
-      continue;
-    }
-
-    // put_state(component, :key, value) or |> put_state(:key, value)
-    const putStateAtom = line.match(/put_state\s*\([^,]*,\s*:(\w+)/);
-    if (putStateAtom && !stateKeysSet.has(putStateAtom[1])) {
-      stateKeysSet.set(putStateAtom[1], { name: putStateAtom[1], source: 'put_state' });
-    }
-    const putStatePiped = line.match(/put_state\s*\(\s*:(\w+)/);
-    if (putStatePiped && !putStateAtom && !stateKeysSet.has(putStatePiped[1])) {
-      stateKeysSet.set(putStatePiped[1], { name: putStatePiped[1], source: 'put_state' });
-    }
-
-    // put_state(component, key: value, key2: value2) — keyword list (flat state)
-    const putStateKw = /put_state\s*\([^,]+,\s*((?:\w+:\s*[^,)]+,?\s*)+)/;
-    const kwMatch = line.match(putStateKw);
-    if (kwMatch && !putStateAtom) {
-      const kwPairs = kwMatch[1].matchAll(/(\w+):\s*/g);
-      for (const kw of kwPairs) {
-        if (!stateKeysSet.has(kw[1])) {
-          stateKeysSet.set(kw[1], { name: kw[1], source: 'put_state' });
-        }
-      }
-    }
-
-    // put_state(component, %{key: value}) — map of flat state keys
-    const putStateMap = line.match(/put_state\s*\([^,]+,\s*%\{([^}]+)\}/);
-    if (putStateMap) {
-      const mapPairs = putStateMap[1].matchAll(/(\w+):\s*/g);
-      for (const mp of mapPairs) {
-        if (!stateKeysSet.has(mp[1])) {
-          stateKeysSet.set(mp[1], { name: mp[1], source: 'put_state' });
-        }
-      }
-    }
-  }
-
-  return { actions, commands, props, stateKeys: Array.from(stateKeysSet.values()) };
-}
-
-function extractFunctionBody(lines: string[], defLine: number, maxLine: number): string {
-  const bodyLines: string[] = [];
-  let depth = 0;
-  let started = false;
-
-  for (let i = defLine; i <= maxLine; i++) {
-    const line = lines[i];
-    if (!line) continue;
-
-    if (/\bdo\b/.test(line)) {
-      depth++;
-      started = true;
-    }
-    if (started) {
-      bodyLines.push(line);
-    }
-    if (/^\s*end\b/.test(line) && started) {
-      depth--;
-      if (depth <= 0) break;
-    }
-  }
-
-  return bodyLines.join('\n');
-}
-
-function checkUsesParams(body: string, paramsVar: string): boolean {
-  if (paramsVar === '_params' || paramsVar === '_') return false;
-
-  const bodyLines = body.split('\n').slice(1);
-  const bodyText = bodyLines.join('\n');
-  const pattern = new RegExp(`\\b${paramsVar}\\b`);
-  return pattern.test(bodyText);
-}
-
-function extractParamKeys(body: string, paramsVar: string): string[] {
-  const keys: string[] = [];
-
-  const dotPattern = new RegExp(`\\b${paramsVar}\\.(\\w+)`, 'g');
-  let match: RegExpExecArray | null;
-  while ((match = dotPattern.exec(body)) !== null) {
-    const key = match[1];
-    if (key !== 'event' && !keys.includes(key)) {
-      keys.push(key);
-    }
-  }
-
-  const bracketPattern = new RegExp(`\\b${paramsVar}\\[\\s*:(\\w+)\\s*\\]`, 'g');
-  while ((match = bracketPattern.exec(body)) !== null) {
-    if (!keys.includes(match[1])) {
-      keys.push(match[1]);
-    }
-  }
-
-  return keys;
-}
-
-export async function resolveModuleFields(
-  moduleName: string,
-  document: vscode.TextDocument
-): Promise<string[]> {
-  const text = document.getText();
-  let fullName = moduleName;
-
-  const aliasPattern = new RegExp(`^\\s*alias\\s+(\\S+\\.${moduleName})\\s*$`, 'm');
-  const aliasMatch = aliasPattern.exec(text);
-  if (aliasMatch) {
-    fullName = aliasMatch[1];
-  }
-
-  const aliasAsPattern = new RegExp(`^\\s*alias\\s+(\\S+),\\s*as:\\s*${moduleName}\\s*$`, 'm');
-  const aliasAsMatch = aliasAsPattern.exec(text);
-  if (aliasAsMatch) {
-    fullName = aliasAsMatch[1];
-  }
-
-  const groupPattern = /^\s*alias\s+(\S+)\.\{([^}]+)\}/gm;
-  let groupMatch: RegExpExecArray | null;
-  while ((groupMatch = groupPattern.exec(text)) !== null) {
-    const names = groupMatch[2].split(',').map(n => n.trim());
-    if (names.includes(moduleName)) {
-      fullName = `${groupMatch[1]}.${moduleName}`;
-      break;
-    }
-  }
-
-  const files = await vscode.workspace.findFiles(
-    '**/*.{ex,exs}',
-    '{**/deps/**,**/node_modules/**,**/_build/**}'
-  );
-
-  for (const fileUri of files) {
-    const doc = await vscode.workspace.openTextDocument(fileUri);
-    const fileText = doc.getText();
-
-    const defPattern = new RegExp(`^\\s*defmodule\\s+${fullName.replace(/\./g, '\\.')}\\s+do`, 'm');
-    if (!defPattern.test(fileText)) continue;
-
-    const fields: string[] = [];
-
-    const attrPattern = /^\s*attribute\s+:(\w+)/gm;
-    let attrMatch: RegExpExecArray | null;
-    while ((attrMatch = attrPattern.exec(fileText)) !== null) {
-      fields.push(attrMatch[1]);
-    }
-
-    const pkPattern = /^\s*(?:uuid_v7_primary_key|uuid_primary_key|integer_primary_key)\s*\(\s*:(\w+)/gm;
-    let pkMatch: RegExpExecArray | null;
-    while ((pkMatch = pkPattern.exec(fileText)) !== null) {
-      fields.push(pkMatch[1]);
-    }
-
-    if (/^\s*timestamps\(\)/m.test(fileText)) {
-      fields.push('inserted_at', 'updated_at');
-    }
-
-    if (fields.length > 0) return fields;
-  }
-
-  return [];
 }
 
 function isInsideHtmlTag(
@@ -356,51 +121,36 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
     const textBefore = line.substring(0, position.character);
     this.outputChannel.appendLine(`--- Event Completion ---`);
     this.outputChannel.appendLine(`Language: ${document.languageId}, Trigger: "${context.triggerCharacter || 'none'}"`);
-    this.outputChannel.appendLine(`Line ${position.line}: "${line}"`);
     this.outputChannel.appendLine(`Text before cursor: "${textBefore}"`);
 
     const isElixir = document.languageId === 'elixir';
     const isHologram = document.languageId === 'hologram';
 
     if (isElixir && !isInsideHoloSigil(document, position)) {
-      this.outputChannel.appendLine(`Skipped: not inside ~HOLO sigil`);
       return undefined;
     }
 
     if (!isElixir && !isHologram) {
-      this.outputChannel.appendLine(`Skipped: language not elixir or hologram`);
       return undefined;
     }
 
-    const insideTag = isInsideHtmlTag(document, position);
-    this.outputChannel.appendLine(`Inside HTML tag: ${insideTag}`);
-
     const ctx = getCompletionContext(document, position);
-    this.outputChannel.appendLine(`Completion context: ${ctx || 'none'}`);
     if (!ctx) return undefined;
 
     if (ctx === 'event_type') {
-      const items = this.getEventTypeCompletions(document, position);
-      this.outputChannel.appendLine(`Returning ${items.length} event type completions`);
-      return items;
+      return this.getEventTypeCompletions(document, position);
     }
 
     if (ctx === 'event_value') {
-      const items = this.getEventValueCompletions(document, position);
-      this.outputChannel.appendLine(`Returning ${items.length} event value completions`);
-      return items;
+      return this.getEventValueCompletions(document, position);
     }
 
     if (ctx === 'state_variable') {
-      const items = this.getStateVariableCompletions(document, position);
-      this.outputChannel.appendLine(`Returning ${items.length} state variable completions`);
-      return items;
+      return this.getStateVariableCompletions(document, position);
     }
 
     if (ctx === 'field_access') {
-      const items = await this.getFieldAccessCompletions(document, position);
-      this.outputChannel.appendLine(`Returning ${items.length} field access completions`);
-      return items;
+      return this.getFieldAccessCompletions(document, position);
     }
 
     return undefined;
@@ -417,7 +167,6 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
     if (!dollarMatch) return [];
 
     const dollarStart = position.character - dollarMatch[0].length;
-
     const events = getEventTypes();
 
     const afterDollarRange = new vscode.Range(
@@ -431,12 +180,8 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
       item.detail = event.description || '';
       item.sortText = String(index).padStart(2, '0');
       item.filterText = nameWithoutDollar;
-      item.range = {
-        inserting: afterDollarRange,
-        replacing: afterDollarRange,
-      };
+      item.range = { inserting: afterDollarRange, replacing: afterDollarRange };
       item.insertText = nameWithoutDollar;
-      this.outputChannel.appendLine(`  Item: label="${item.label}" insertText="${item.insertText}" filterText="${item.filterText}" range=[${dollarStart + 1},${position.character}] kind=${item.kind}`);
       return item;
     });
   }
@@ -445,10 +190,12 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
     document: vscode.TextDocument,
     position: vscode.Position
   ): vscode.CompletionItem[] {
-    const moduleRange = findEnclosingModule(document, position);
-    if (!moduleRange) return [];
+    const currentModuleName = findEnclosingModuleName(document, position);
+    if (!currentModuleName) return [];
 
-    const members = scanModuleMembers(document, moduleRange);
+    const mod = this.index.getPageOrComponent(currentModuleName);
+    if (!mod) return [];
+
     const items: vscode.CompletionItem[] = [];
     let sortIndex = 0;
 
@@ -465,7 +212,7 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
       position
     );
 
-    for (const action of members.actions) {
+    for (const action of mod.actions) {
       if (action.usesParams && action.params.length > 0) {
         const paramSnippets = action.params
           .map((p, i) => `${p}: \${${i + 1}:value}`)
@@ -519,7 +266,7 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
       items.push(longhandItem);
     }
 
-    for (const command of members.commands) {
+    for (const command of mod.commands) {
       const item = new vscode.CompletionItem(
         `:${command.name}`,
         vscode.CompletionItemKind.Event
@@ -547,7 +294,7 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
       items.push(item);
     }
 
-    for (const prop of members.props) {
+    for (const prop of mod.props) {
       const item = new vscode.CompletionItem(
         `@${prop.name}`,
         vscode.CompletionItemKind.Field
@@ -567,10 +314,12 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
     document: vscode.TextDocument,
     position: vscode.Position
   ): vscode.CompletionItem[] {
-    const moduleRange = findEnclosingModule(document, position);
-    if (!moduleRange) return [];
+    const currentModuleName = findEnclosingModuleName(document, position);
+    if (!currentModuleName) return [];
 
-    const members = scanModuleMembers(document, moduleRange);
+    const mod = this.index.getPageOrComponent(currentModuleName);
+    if (!mod) return [];
+
     const items: vscode.CompletionItem[] = [];
     let sortIndex = 0;
 
@@ -586,7 +335,7 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
       position
     );
 
-    for (const prop of members.props) {
+    for (const prop of mod.props) {
       const item = new vscode.CompletionItem(
         `@${prop.name}`,
         vscode.CompletionItemKind.Property
@@ -594,45 +343,40 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
       item.detail = `Prop (${prop.type})`;
       item.sortText = String(sortIndex++).padStart(3, '0');
       item.filterText = prop.name;
-      item.range = {
-        inserting: afterAtRange,
-        replacing: afterAtRange,
-      };
+      item.range = { inserting: afterAtRange, replacing: afterAtRange };
       item.insertText = prop.name;
       items.push(item);
     }
 
-    const seenNames = new Set(members.props.map(p => p.name));
-    for (const state of members.stateKeys) {
-      if (seenNames.has(state.name)) continue;
-      seenNames.add(state.name);
+    const seenNames = new Set(mod.props.map(p => p.name));
+    for (const stateKey of mod.stateKeys) {
+      if (seenNames.has(stateKey)) continue;
+      seenNames.add(stateKey);
 
       const item = new vscode.CompletionItem(
-        `@${state.name}`,
+        `@${stateKey}`,
         vscode.CompletionItemKind.Variable
       );
       item.detail = 'State';
       item.sortText = String(sortIndex++).padStart(3, '0');
-      item.filterText = state.name;
-      item.range = {
-        inserting: afterAtRange,
-        replacing: afterAtRange,
-      };
-      item.insertText = state.name;
+      item.filterText = stateKey;
+      item.range = { inserting: afterAtRange, replacing: afterAtRange };
+      item.insertText = stateKey;
       items.push(item);
     }
 
     return items;
   }
 
-  private async getFieldAccessCompletions(
+  private getFieldAccessCompletions(
     document: vscode.TextDocument,
     position: vscode.Position
-  ): Promise<vscode.CompletionItem[]> {
-    const moduleRange = findEnclosingModule(document, position);
-    if (!moduleRange) return [];
+  ): vscode.CompletionItem[] {
+    const currentModuleName = findEnclosingModuleName(document, position);
+    if (!currentModuleName) return [];
 
-    const members = scanModuleMembers(document, moduleRange);
+    const mod = this.index.getPageOrComponent(currentModuleName);
+    if (!mod) return [];
 
     const line = document.lineAt(position.line).text;
     const textBefore = line.substring(0, position.character);
@@ -642,30 +386,16 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
 
     const varName = fieldMatch[1];
     const partialField = fieldMatch[2];
-    this.outputChannel.appendLine(`Field access: @${varName}.${partialField}`);
 
     let fields: string[] = [];
     let source = '';
 
-    const prop = members.props.find(p => p.name === varName);
-    if (prop) {
+    const prop = mod.props.find(p => p.name === varName);
+    if (prop && prop.type !== 'any' && /^[A-Z]/.test(prop.type)) {
+      const fullName = resolveComponentName(prop.type, document) ?? prop.type;
+      fields = this.index.getModuleFields(fullName);
       source = `Prop (${prop.type})`;
-      if (prop.type !== 'any' && /^[A-Z]/.test(prop.type)) {
-        const fullName = resolveComponentName(prop.type, document) ?? prop.type;
-        fields = this.index.getModuleFields(fullName);
-        if (fields.length === 0) {
-          fields = await resolveModuleFields(prop.type, document);
-        }
-      }
     }
-
-    if (fields.length === 0) {
-      const templateFields = this.scanTemplateFieldUsage(document, moduleRange, varName);
-      fields = templateFields;
-      source = source || 'Inferred';
-    }
-
-    this.outputChannel.appendLine(`Found ${fields.length} fields for @${varName}: ${fields.join(', ')}`);
 
     if (fields.length === 0) return [];
 
@@ -683,33 +413,9 @@ export class HologramEventCompletionProvider implements vscode.CompletionItemPro
       item.detail = source;
       item.sortText = String(index).padStart(3, '0');
       item.filterText = field;
-      item.range = {
-        inserting: afterDotRange,
-        replacing: afterDotRange,
-      };
+      item.range = { inserting: afterDotRange, replacing: afterDotRange };
       item.insertText = field;
       return item;
     });
-  }
-
-  private scanTemplateFieldUsage(
-    document: vscode.TextDocument,
-    moduleRange: { start: number; end: number },
-    varName: string
-  ): string[] {
-    const fields: string[] = [];
-    const pattern = new RegExp(`@${varName}\\.(\\w+)`, 'g');
-
-    for (let i = moduleRange.start; i <= moduleRange.end; i++) {
-      const line = document.lineAt(i).text;
-      let match: RegExpExecArray | null;
-      while ((match = pattern.exec(line)) !== null) {
-        if (!fields.includes(match[1])) {
-          fields.push(match[1]);
-        }
-      }
-    }
-
-    return fields;
   }
 }

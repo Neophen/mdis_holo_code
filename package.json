@@ -137,46 +137,6 @@
             }
           ],
           "description": "Hologram event types shown in autocomplete. Order determines sort priority. Add, remove, or reorder to match your usage."
-        },
-        "hologram.customComponents": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "module": {
-                "type": "string",
-                "description": "Fully qualified module name (e.g. Hologram.UI.Link)"
-              },
-              "props": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string",
-                      "default": "any"
-                    },
-                    "required": {
-                      "type": "boolean",
-                      "default": false
-                    }
-                  },
-                  "required": [
-                    "name"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "module",
-              "props"
-            ]
-          },
-          "default": [],
-          "description": "Define additional components (e.g. from deps) with their props for validation and autocomplete."
         }
       }
     },

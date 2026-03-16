@@ -1,12 +1,6 @@
 import * as vscode from 'vscode';
-import { resolveComponentName, findEnclosingModule } from './hologramResolver';
-import { scanModuleMembers, resolveModuleFields } from './eventCompletionProvider';
+import { resolveComponentName, findEnclosingModuleName } from './hologramResolver';
 import { WorkspaceIndex, ModuleInfo } from './workspaceIndex';
-
-interface PageParam {
-  name: string;
-  type: string;
-}
 
 interface PageContext {
   active: boolean;
@@ -22,14 +16,12 @@ function getPageContext(
   const textBefore = line.substring(0, position.character);
   const none: PageContext = { active: false, existingValue: '', source: 'link_to' };
 
-  // 1. Check put_page(component, PageModule) or |> put_page(PageModule)
   const putPageMatch = textBefore.match(/put_page\s*\([^,]*,\s*([A-Za-z0-9_.]*)?$/)
     || textBefore.match(/put_page\s*\(\s*([A-Za-z0-9_.]*)?$/);
   if (putPageMatch) {
     return { active: true, existingValue: putPageMatch[1] || '', source: 'put_page' };
   }
 
-  // 2. Check <Link to={PageModule}
   const fullText = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
 
   let lastOpenTag = -1;
@@ -80,28 +72,31 @@ function isInsideHoloSigil(
   return true;
 }
 
-/**
- * Try to find a smart default value for a page param by matching against
- * the current component's props/state fields.
- */
 function findSmartDefault(
   paramName: string,
-  varFields: Map<string, string[]>
+  currentModule: ModuleInfo | undefined,
+  index: WorkspaceIndex,
+  document: vscode.TextDocument
 ): string {
-  for (const [varName, fields] of varFields) {
-    if (fields.includes(paramName)) {
-      return `@${varName}.${paramName}`;
+  if (!currentModule) return paramName;
+
+  for (const prop of currentModule.props) {
+    if (prop.type !== 'any' && /^[A-Z]/.test(prop.type)) {
+      const fullName = resolveComponentName(prop.type, document) ?? prop.type;
+      const fields = index.getModuleFields(fullName);
+      if (fields.includes(paramName)) {
+        return `@${prop.name}.${paramName}`;
+      }
     }
   }
+
   return paramName;
 }
 
 export class PageCompletionProvider implements vscode.CompletionItemProvider {
-  private outputChannel: vscode.OutputChannel;
   private index: WorkspaceIndex;
 
-  constructor(outputChannel: vscode.OutputChannel, index: WorkspaceIndex) {
-    this.outputChannel = outputChannel;
+  constructor(_outputChannel: vscode.OutputChannel, index: WorkspaceIndex) {
     this.index = index;
   }
 
@@ -119,7 +114,6 @@ export class PageCompletionProvider implements vscode.CompletionItemProvider {
     }
 
     const pageCtx = getPageContext(document, position);
-
     if (!pageCtx.active) {
       return undefined;
     }
@@ -128,11 +122,7 @@ export class PageCompletionProvider implements vscode.CompletionItemProvider {
       return undefined;
     }
 
-    this.outputChannel.appendLine(`--- Page Completion (${pageCtx.source}) ---`);
-    this.outputChannel.appendLine(`Existing value: "${pageCtx.existingValue}"`);
-
     const pages = this.index.getAllPages();
-    this.outputChannel.appendLine(`Found ${pages.length} pages`);
 
     const replaceStart = position.character - pageCtx.existingValue.length;
     const range = new vscode.Range(
@@ -140,9 +130,9 @@ export class PageCompletionProvider implements vscode.CompletionItemProvider {
       position
     );
 
-    // Build alias map from current document to offer short names
+    // Build alias map from current document
     const docText = document.getText();
-    const aliases = new Map<string, string>(); // fullName -> shortName
+    const aliases = new Map<string, string>();
 
     const aliasRegex = /^\s*alias\s+(\S+?)(?:\.\{([^}]+)\})?\s*$/gm;
     let aliasMatch: RegExpExecArray | null;
@@ -164,8 +154,9 @@ export class PageCompletionProvider implements vscode.CompletionItemProvider {
       aliases.set(aliasMatch[1], aliasMatch[2]);
     }
 
-    // Gather current component's props/state for smart param matching
-    const varFields = await this.getCurrentComponentFields(document, position);
+    // Get current module for smart defaults
+    const currentModuleName = findEnclosingModuleName(document, position);
+    const currentModule = currentModuleName ? this.index.getPageOrComponent(currentModuleName) : undefined;
 
     return pages.map((page, index) => {
       const aliasedName = aliases.get(page.fullName);
@@ -176,7 +167,6 @@ export class PageCompletionProvider implements vscode.CompletionItemProvider {
         vscode.CompletionItemKind.Module
       );
 
-      // Extract params from page props (for page completions, props serve as params)
       const paramNames = page.props.map(p => p.name);
       item.detail = page.route ? `Page (${page.route})` : 'Page';
       if (paramNames.length > 0) {
@@ -198,7 +188,7 @@ export class PageCompletionProvider implements vscode.CompletionItemProvider {
 
       if (page.props.length > 0) {
         const paramSnippets = page.props.map((p, i) => {
-          const smartDefault = findSmartDefault(p.name, varFields);
+          const smartDefault = findSmartDefault(p.name, currentModule, this.index, document);
           return `${p.name}: \${${i + 1}:${smartDefault}}`;
         }).join(', ');
         item.insertText = new vscode.SnippetString(`${displayName}, ${paramSnippets}`);
@@ -209,82 +199,15 @@ export class PageCompletionProvider implements vscode.CompletionItemProvider {
       return item;
     });
   }
-
-  private async getCurrentComponentFields(
-    document: vscode.TextDocument,
-    position: vscode.Position
-  ): Promise<Map<string, string[]>> {
-    const varFields = new Map<string, string[]>();
-
-    try {
-      const moduleRange = findEnclosingModule(document, position);
-      if (!moduleRange) return varFields;
-
-      const members = scanModuleMembers(document, moduleRange);
-
-      for (const prop of members.props) {
-        let fields: string[] = [];
-        if (prop.type !== 'any' && /^[A-Z]/.test(prop.type)) {
-          // Try the index first
-          const fullName = resolveComponentName(prop.type, document) ?? prop.type;
-          fields = this.index.getModuleFields(fullName);
-          if (fields.length === 0) {
-            fields = await resolveModuleFields(prop.type, document);
-          }
-        }
-        if (fields.length === 0) {
-          fields = this.scanTemplateFieldUsage(document, moduleRange, prop.name);
-        }
-        if (fields.length > 0) {
-          varFields.set(prop.name, fields);
-        }
-      }
-
-      for (const state of members.stateKeys) {
-        if (varFields.has(state.name)) continue;
-        const fields = this.scanTemplateFieldUsage(document, moduleRange, state.name);
-        if (fields.length > 0) {
-          varFields.set(state.name, fields);
-        }
-      }
-    } catch {
-      // Silently fail — smart defaults are optional
-    }
-
-    return varFields;
-  }
-
-  private scanTemplateFieldUsage(
-    document: vscode.TextDocument,
-    moduleRange: { start: number; end: number },
-    varName: string
-  ): string[] {
-    const fields: string[] = [];
-    const pattern = new RegExp(`@${varName}\\.(\\w+)`, 'g');
-
-    for (let i = moduleRange.start; i <= moduleRange.end; i++) {
-      const line = document.lineAt(i).text;
-      let match: RegExpExecArray | null;
-      while ((match = pattern.exec(line)) !== null) {
-        if (!fields.includes(match[1])) {
-          fields.push(match[1]);
-        }
-      }
-    }
-
-    return fields;
-  }
 }
 
 // Diagnostics for invalid page references in Link to={...}
 export class PageDiagnosticsProvider implements vscode.Disposable {
   private diagnosticCollection: vscode.DiagnosticCollection;
-  private outputChannel: vscode.OutputChannel;
   private index: WorkspaceIndex;
   private disposables: vscode.Disposable[] = [];
 
-  constructor(outputChannel: vscode.OutputChannel, index: WorkspaceIndex) {
-    this.outputChannel = outputChannel;
+  constructor(_outputChannel: vscode.OutputChannel, index: WorkspaceIndex) {
     this.index = index;
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection('hologram-pages');
 
@@ -296,7 +219,6 @@ export class PageDiagnosticsProvider implements vscode.Disposable {
       })
     );
 
-    // Re-check when index updates
     this.disposables.push(
       this.index.onDidUpdate(() => {
         if (vscode.window.activeTextEditor) {
@@ -343,7 +265,6 @@ export class PageDiagnosticsProvider implements vscode.Disposable {
       let match: RegExpExecArray | null;
       while ((match = regex.exec(text)) !== null) {
         const pageName = match[nameGroupIndex];
-
         const fullName = resolveComponentName(pageName, document) ?? pageName;
 
         if (pageNames.has(fullName) || pageNames.has(pageName)) {
@@ -384,7 +305,6 @@ export class PageDiagnosticsProvider implements vscode.Disposable {
 }
 
 function findSimilarPages(name: string, pages: ModuleInfo[]): ModuleInfo[] {
-  const nameLower = name.toLowerCase();
   const nameParts = name.split('.');
   const lastPart = nameParts[nameParts.length - 1].toLowerCase();
 
@@ -406,7 +326,7 @@ function findSimilarPages(name: string, pages: ModuleInfo[]): ModuleInfo[] {
         score += shared * 10;
       }
 
-      if (page.fullName.toLowerCase().includes(nameLower)) score += 30;
+      if (page.fullName.toLowerCase().includes(name.toLowerCase())) score += 30;
 
       return { page, score };
     })

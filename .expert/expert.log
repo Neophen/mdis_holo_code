@@ -1,0 +1,12 @@
+
+22:14:51.041 instance_id=19CF7AEC004 [debug] sent notification server -> client window/logMessage
+
+22:14:51.041 instance_id=19CF7AEC004 [info] Unhandled notification: $/setTrace
+
+22:14:51.042 instance_id=19CF7AEC004 [debug] handled notification client -> server $/setTrace in 3ms
+
+22:49:09.768 instance_id=19CF7AEC004 [debug] sent notification server -> client window/logMessage
+
+22:49:09.768 instance_id=19CF7AEC004 [info] Unhandled notification: $/setTrace
+
+22:49:09.777 instance_id=19CF7AEC004 [debug] handled notification client -> server $/setTrace in 40ms

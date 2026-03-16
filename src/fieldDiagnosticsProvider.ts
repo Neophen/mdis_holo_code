@@ -1,17 +1,14 @@
 import * as vscode from 'vscode';
-import { findEnclosingModule, resolveComponentName } from './hologramResolver';
-import { scanModuleMembers, resolveModuleFields } from './eventCompletionProvider';
+import { resolveComponentName } from './hologramResolver';
 import { WorkspaceIndex } from './workspaceIndex';
 
 export class FieldDiagnosticsProvider implements vscode.Disposable {
   private diagnosticCollection: vscode.DiagnosticCollection;
-  private outputChannel: vscode.OutputChannel;
   private index: WorkspaceIndex;
   private disposables: vscode.Disposable[] = [];
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(outputChannel: vscode.OutputChannel, index: WorkspaceIndex) {
-    this.outputChannel = outputChannel;
+  constructor(_outputChannel: vscode.OutputChannel, index: WorkspaceIndex) {
     this.index = index;
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection('hologram-fields');
 
@@ -24,7 +21,6 @@ export class FieldDiagnosticsProvider implements vscode.Disposable {
       })
     );
 
-    // Re-check when index updates
     this.disposables.push(
       this.index.onDidUpdate(() => {
         if (vscode.window.activeTextEditor) {
@@ -58,42 +54,24 @@ export class FieldDiagnosticsProvider implements vscode.Disposable {
       return;
     }
 
+    // Find the module name from defmodule
+    const defmoduleMatch = text.match(/^\s*defmodule\s+(\S+)\s+do/m);
+    if (!defmoduleMatch) return;
+
+    const moduleName = defmoduleMatch[1];
+    const mod = this.index.getPageOrComponent(moduleName);
+    if (!mod) return;
+
     const diagnostics: vscode.Diagnostic[] = [];
 
-    this.outputChannel.appendLine(`--- Field Diagnostics: checking ${document.uri.fsPath} ---`);
-
-    const fieldAccessPattern = /@(\w+)\.(\w+)/g;
-    let match: RegExpExecArray | null;
-
-    const defmoduleMatch = text.match(/^\s*defmodule\b/m);
-    if (!defmoduleMatch) {
-      this.outputChannel.appendLine(`  No defmodule found`);
-      return;
-    }
-
-    const defmoduleLine = document.positionAt(defmoduleMatch.index!).line;
-    const moduleRange = { start: defmoduleLine, end: document.lineCount - 1 };
-    const members = scanModuleMembers(document, moduleRange);
-
-    this.outputChannel.appendLine(`  Props: ${members.props.map(p => `${p.name}(${p.type})`).join(', ') || 'none'}`);
-    this.outputChannel.appendLine(`  State keys: ${members.stateKeys.map(s => s.name).join(', ') || 'none'}`);
-
-    // Build a map of known fields per variable
+    // Build a map of known fields per prop variable
     const fieldMap = new Map<string, { fields: string[]; source: string }>();
 
-    // Props with module types (Ash resources) — use index first, fallback to resolveModuleFields
-    for (const prop of members.props) {
+    for (const prop of mod.props) {
       if (prop.type !== 'any' && /^[A-Z]/.test(prop.type)) {
-        this.outputChannel.appendLine(`  Resolving fields for prop "${prop.name}" type "${prop.type}"...`);
-
         const fullName = resolveComponentName(prop.type, document) ?? prop.type;
-        let fields = this.index.getModuleFields(fullName);
+        const fields = this.index.getModuleFields(fullName);
 
-        if (fields.length === 0) {
-          fields = await resolveModuleFields(prop.type, document);
-        }
-
-        this.outputChannel.appendLine(`  Resolved ${fields.length} fields: ${fields.join(', ')}`);
         if (fields.length > 0) {
           fieldMap.set(prop.name, { fields, source: `Prop (${prop.type})` });
         }
@@ -101,11 +79,6 @@ export class FieldDiagnosticsProvider implements vscode.Disposable {
     }
 
     if (fieldMap.size === 0) return;
-
-    this.outputChannel.appendLine(`--- Field Diagnostics for ${document.uri.fsPath} ---`);
-    for (const [name, info] of fieldMap) {
-      this.outputChannel.appendLine(`  @${name}: [${info.fields.join(', ')}] (${info.source})`);
-    }
 
     // Find template regions (inside ~HOLO""" ... """)
     const templateRegions: { start: number; end: number }[] = [];
@@ -120,7 +93,8 @@ export class FieldDiagnosticsProvider implements vscode.Disposable {
       }
     }
 
-    this.outputChannel.appendLine(`  Template regions: ${templateRegions.length} (${templateRegions.map(r => `${r.start}-${r.end}`).join(', ')})`);
+    const fieldAccessPattern = /@(\w+)\.(\w+)/g;
+    let match: RegExpExecArray | null;
 
     while ((match = fieldAccessPattern.exec(text)) !== null) {
       const varName = match[1];
@@ -128,14 +102,13 @@ export class FieldDiagnosticsProvider implements vscode.Disposable {
       const matchPos = match.index;
 
       const inTemplate = templateRegions.some(r => matchPos >= r.start && matchPos <= r.end);
-      this.outputChannel.appendLine(`  @${varName}.${fieldName} at pos ${matchPos} — inTemplate: ${inTemplate}, known: ${fieldMap.has(varName)}`);
       if (!inTemplate) continue;
 
       const known = fieldMap.get(varName);
       if (!known) continue;
 
       if (!known.fields.includes(fieldName)) {
-        const fieldStart = matchPos + 1 + varName.length + 1; // @varName.
+        const fieldStart = matchPos + 1 + varName.length + 1;
         const startPos = document.positionAt(fieldStart);
         const endPos = document.positionAt(fieldStart + fieldName.length);
         const range = new vscode.Range(startPos, endPos);

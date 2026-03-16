@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { resolveComponentName, isHologramModule } from './hologramResolver';
+import { resolveComponentName } from './hologramResolver';
 import { WorkspaceIndex, ModuleInfo } from './workspaceIndex';
 
 interface ComponentUsage {
@@ -60,13 +60,11 @@ function findComponentUsages(text: string): ComponentUsage[] {
 
 export class ComponentPropsDiagnosticsProvider implements vscode.Disposable {
   private diagnosticCollection: vscode.DiagnosticCollection;
-  private outputChannel: vscode.OutputChannel;
   private index: WorkspaceIndex;
   private disposables: vscode.Disposable[] = [];
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(outputChannel: vscode.OutputChannel, index: WorkspaceIndex) {
-    this.outputChannel = outputChannel;
+  constructor(_outputChannel: vscode.OutputChannel, index: WorkspaceIndex) {
     this.index = index;
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection('hologram-component-props');
 
@@ -79,7 +77,6 @@ export class ComponentPropsDiagnosticsProvider implements vscode.Disposable {
       })
     );
 
-    // Re-check when index updates
     this.disposables.push(
       this.index.onDidUpdate(() => {
         if (vscode.window.activeTextEditor) {
@@ -107,7 +104,8 @@ export class ComponentPropsDiagnosticsProvider implements vscode.Disposable {
 
     const text = document.getText();
 
-    if (!isHologramModule(text)) {
+    // Only check Hologram modules
+    if (!/^\s*use\s+Hologram\.(Component|Page)\s*$/m.test(text)) {
       this.diagnosticCollection.delete(document.uri);
       return;
     }

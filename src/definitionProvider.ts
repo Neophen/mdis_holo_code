@@ -1,16 +1,9 @@
 import * as vscode from 'vscode';
 import {
   getCursorContext,
-  findEnclosingModule,
-  findStateDefinitions,
-  findActionDefinitions,
-  findFunctionDefinitions,
-  findComponentLocations,
-  findPageModule,
+  findEnclosingModuleName,
   resolveComponentName,
-  escapeRegex,
 } from './hologramResolver';
-import { scanModuleMembers } from './eventCompletionProvider';
 import { WorkspaceIndex } from './workspaceIndex';
 
 export class HologramDefinitionProvider implements vscode.DefinitionProvider {
@@ -31,210 +24,132 @@ export class HologramDefinitionProvider implements vscode.DefinitionProvider {
     this.outputChannel.appendLine(`--- Go to Definition ---`);
     this.outputChannel.appendLine(`File: ${document.uri.fsPath}`);
     this.outputChannel.appendLine(`Line ${position.line}: "${line}"`);
-    this.outputChannel.appendLine(`Char: ${position.character}`);
 
     const ctx = getCursorContext(document, position);
     if (!ctx) {
-      this.outputChannel.appendLine(`No cursor context detected`);
       return undefined;
     }
 
     this.outputChannel.appendLine(`Context: ${ctx.kind} = "${ctx.name}"`);
 
+    const currentModuleName = findEnclosingModuleName(document, position);
+    const currentModule = currentModuleName ? this.index.getModule(currentModuleName) : undefined;
+
     switch (ctx.kind) {
       case 'variable': {
-        const moduleRange = findEnclosingModule(document, position);
-        this.outputChannel.appendLine(`Module range: ${JSON.stringify(moduleRange)}`);
-        if (!moduleRange) return undefined;
-        const locs = findStateDefinitions(document, ctx.name, moduleRange);
-        this.outputChannel.appendLine(`Found ${locs.length} variable definitions`);
-        return locs.length > 0 ? locs : undefined;
-      }
+        if (!currentModule) return undefined;
 
-      case 'action': {
-        const moduleRange = findEnclosingModule(document, position);
-        this.outputChannel.appendLine(`Module range: ${JSON.stringify(moduleRange)}`);
-        if (!moduleRange) return undefined;
-        const locs = findActionDefinitions(document, ctx.name, moduleRange);
-        this.outputChannel.appendLine(`Found ${locs.length} action definitions`);
-        return locs.length > 0 ? locs : undefined;
-      }
-
-      case 'component': {
-        // Try index first for fast lookup
-        const fullName = resolveComponentName(ctx.name, document) ?? ctx.name;
-        const mod = this.index.getModule(fullName) || this.index.getModuleByShortName(ctx.name);
-
-        if (mod) {
-          const config = vscode.workspace.getConfiguration('hologram');
-          const target = config.get<string>('defaultJumpTarget', 'template');
-          this.outputChannel.appendLine(`Default jump target: ${target}`);
-
-          if (target === 'template' && mod.templateLine !== undefined) {
-            const loc = new vscode.Location(mod.uri, new vscode.Position(mod.templateLine, 0));
-            this.outputChannel.appendLine(`Jumping to template: ${mod.uri.fsPath}:${mod.templateLine}`);
-            return loc;
-          }
-          if (target === 'init' && mod.initLine !== undefined) {
-            const loc = new vscode.Location(mod.uri, new vscode.Position(mod.initLine, 0));
-            this.outputChannel.appendLine(`Jumping to init: ${mod.uri.fsPath}:${mod.initLine}`);
-            return loc;
-          }
-          // Fallback within index data
-          if (mod.templateLine !== undefined) {
-            return new vscode.Location(mod.uri, new vscode.Position(mod.templateLine, 0));
-          }
-          return new vscode.Location(mod.uri, new vscode.Position(mod.defmoduleLine, 0));
+        // Check props
+        const prop = currentModule.props.find(p => p.name === ctx.name);
+        if (prop) {
+          // Jump to defmodule line (prop is defined in the module)
+          return new vscode.Location(currentModule.uri, new vscode.Position(currentModule.defmoduleLine, 0));
         }
 
-        // Fallback to full scan (for modules not in index)
-        const results = await findComponentLocations(ctx.name, document);
-        this.outputChannel.appendLine(`Found ${results.length} component matches`);
-        if (results.length === 0) return undefined;
-
-        const config = vscode.workspace.getConfiguration('hologram');
-        const target = config.get<string>('defaultJumpTarget', 'template');
-        this.outputChannel.appendLine(`Default jump target: ${target}`);
-
-        for (const locs of results) {
-          const loc = locs[target as keyof typeof locs] ?? locs.template ?? locs.module;
-          if (loc) {
-            this.outputChannel.appendLine(`Jumping to: ${loc.uri.fsPath}:${loc.range.start.line}`);
-            return loc;
-          }
+        // Check stateKeys — no line info available, jump to module
+        if (currentModule.stateKeys.includes(ctx.name)) {
+          return new vscode.Location(currentModule.uri, new vscode.Position(currentModule.defmoduleLine, 0));
         }
+
         return undefined;
       }
 
+      case 'action': {
+        if (!currentModule) return undefined;
+
+        const action = currentModule.actions.find(a => a.name === ctx.name);
+        if (action && action.line > 0) {
+          return new vscode.Location(currentModule.uri, new vscode.Position(action.line - 1, 0));
+        }
+
+        const command = currentModule.commands.find(c => c.name === ctx.name);
+        if (command && command.line > 0) {
+          return new vscode.Location(currentModule.uri, new vscode.Position(command.line - 1, 0));
+        }
+
+        return undefined;
+      }
+
+      case 'component': {
+        const fullName = resolveComponentName(ctx.name, document) ?? ctx.name;
+        const mod = this.index.getModule(fullName) || this.index.getModuleByShortName(ctx.name);
+
+        if (!mod) {
+          this.outputChannel.appendLine(`Component not found in index`);
+          return undefined;
+        }
+
+        const config = vscode.workspace.getConfiguration('hologram');
+        const target = config.get<string>('defaultJumpTarget', 'template');
+
+        if (target === 'template' && mod.templateLine !== undefined) {
+          return new vscode.Location(mod.uri, new vscode.Position(mod.templateLine - 1, 0));
+        }
+        if (target === 'init' && mod.initLine !== undefined) {
+          return new vscode.Location(mod.uri, new vscode.Position(mod.initLine - 1, 0));
+        }
+        if (mod.templateLine !== undefined) {
+          return new vscode.Location(mod.uri, new vscode.Position(mod.templateLine - 1, 0));
+        }
+        return new vscode.Location(mod.uri, new vscode.Position(mod.defmoduleLine - 1, 0));
+      }
+
       case 'function_call': {
-        const moduleRange = findEnclosingModule(document, position);
-        this.outputChannel.appendLine(`Module range: ${JSON.stringify(moduleRange)}`);
-        if (!moduleRange) return undefined;
-        const locs = findFunctionDefinitions(document, ctx.name, moduleRange);
-        this.outputChannel.appendLine(`Found ${locs.length} function definitions`);
-        return locs.length > 0 ? locs : undefined;
+        if (!currentModule) return undefined;
+
+        const func = currentModule.functions.find(f => f.name === ctx.name);
+        if (func && func.line > 0) {
+          return new vscode.Location(currentModule.uri, new vscode.Position(func.line - 1, 0));
+        }
+
+        return undefined;
       }
 
       case 'page': {
-        this.outputChannel.appendLine(`Looking for page module: ${ctx.name}`);
-
-        // Try index first
         const fullName = resolveComponentName(ctx.name, document) ?? ctx.name;
         const mod = this.index.getModule(fullName) || this.index.getModuleByShortName(ctx.name);
 
         if (mod && mod.kind === 'page') {
           if (mod.templateLine !== undefined) {
-            const loc = new vscode.Location(mod.uri, new vscode.Position(mod.templateLine, 0));
-            this.outputChannel.appendLine(`Jumping to page template: ${mod.uri.fsPath}:${mod.templateLine}`);
-            return loc;
+            return new vscode.Location(mod.uri, new vscode.Position(mod.templateLine - 1, 0));
           }
-          const loc = new vscode.Location(mod.uri, new vscode.Position(mod.defmoduleLine, 0));
-          this.outputChannel.appendLine(`Jumping to page module: ${mod.uri.fsPath}:${mod.defmoduleLine}`);
-          return loc;
+          return new vscode.Location(mod.uri, new vscode.Position(mod.defmoduleLine - 1, 0));
         }
 
-        // Fallback to full scan
-        const loc = await findPageModule(ctx.name, document);
-        if (loc) {
-          this.outputChannel.appendLine(`Jumping to page: ${loc.uri.fsPath}:${loc.range.start.line}`);
-          return loc;
-        }
-        this.outputChannel.appendLine(`Page module not found`);
         return undefined;
       }
 
       case 'field_access': {
-        this.outputChannel.appendLine(`Field access: @${ctx.varName}.${ctx.fieldName}`);
-        const moduleRange = findEnclosingModule(document, position);
-        if (!moduleRange) return undefined;
+        if (!currentModule) return undefined;
 
-        const members = scanModuleMembers(document, moduleRange);
-
-        const prop = members.props.find(p => p.name === ctx.varName);
-        let moduleName: string | undefined;
-
-        if (prop && prop.type !== 'any' && /^[A-Z]/.test(prop.type)) {
-          moduleName = prop.type;
-        }
-
-        if (!moduleName) {
-          this.outputChannel.appendLine(`No typed module found for @${ctx.varName}`);
+        const prop = currentModule.props.find(p => p.name === ctx.varName);
+        if (!prop || prop.type === 'any' || !/^[A-Z]/.test(prop.type)) {
           return undefined;
         }
 
-        const resolvedFullName = resolveComponentName(moduleName, document) ?? moduleName;
-        this.outputChannel.appendLine(`Resolving field "${ctx.fieldName}" in module "${resolvedFullName}"`);
+        const resolvedFullName = resolveComponentName(prop.type, document) ?? prop.type;
+        const resource = this.index.getResource(resolvedFullName);
 
-        // Try index first to get the file URI
-        const mod = this.index.getModule(resolvedFullName);
-        if (mod) {
-          const doc = await vscode.workspace.openTextDocument(mod.uri);
-          const fileText = doc.getText();
-          return this.findFieldInFile(doc, mod.uri, fileText, ctx.fieldName, resolvedFullName);
-        }
+        if (resource) {
+          const attr = resource.attributes.find(a => a.name === ctx.fieldName);
+          if (attr && attr.line > 0) {
+            const uri = this.index.getModule(resolvedFullName)?.uri;
+            if (uri) {
+              return new vscode.Location(uri, new vscode.Position(attr.line - 1, 0));
+            }
+          }
 
-        // Fallback to full scan
-        const files = await vscode.workspace.findFiles(
-          '**/*.{ex,exs}',
-          '{**/deps/**,**/node_modules/**,**/_build/**}'
-        );
-
-        for (const fileUri of files) {
-          const doc = await vscode.workspace.openTextDocument(fileUri);
-          const fileText = doc.getText();
-
-          const esc = escapeRegex(resolvedFullName);
-          const defPattern = new RegExp(`^\\s*defmodule\\s+${esc}\\s+do`, 'm');
-          if (!defPattern.test(fileText)) continue;
-
-          const result = this.findFieldInFile(doc, fileUri, fileText, ctx.fieldName, resolvedFullName);
-          if (result) return result;
-          return undefined;
+          const rel = resource.relationships.find(r => r.name === ctx.fieldName);
+          if (rel && rel.line > 0) {
+            const uri = this.index.getModule(resolvedFullName)?.uri;
+            if (uri) {
+              return new vscode.Location(uri, new vscode.Position(rel.line - 1, 0));
+            }
+          }
         }
 
         return undefined;
       }
     }
-  }
-
-  private findFieldInFile(
-    doc: vscode.TextDocument,
-    fileUri: vscode.Uri,
-    fileText: string,
-    fieldName: string,
-    _moduleName: string
-  ): vscode.Location | undefined {
-    const escapedField = escapeRegex(fieldName);
-
-    // Ash resource: attribute :field_name
-    const attrPattern = new RegExp(`^\\s*attribute\\s+:${escapedField}\\b`, 'm');
-    const attrMatch = attrPattern.exec(fileText);
-    if (attrMatch) {
-      const pos = doc.positionAt(attrMatch.index);
-      this.outputChannel.appendLine(`Found attribute at ${fileUri.fsPath}:${pos.line}`);
-      return new vscode.Location(fileUri, pos);
-    }
-
-    // Ash primary key
-    const pkPattern = new RegExp(`^\\s*(?:uuid_v7_primary_key|uuid_primary_key|integer_primary_key)\\s*\\(\\s*:${escapedField}\\b`, 'm');
-    const pkMatch = pkPattern.exec(fileText);
-    if (pkMatch) {
-      const pos = doc.positionAt(pkMatch.index);
-      this.outputChannel.appendLine(`Found primary key at ${fileUri.fsPath}:${pos.line}`);
-      return new vscode.Location(fileUri, pos);
-    }
-
-    // Ash timestamps
-    if (fieldName === 'inserted_at' || fieldName === 'updated_at') {
-      const tsMatch = /^\s*timestamps\(\)/m.exec(fileText);
-      if (tsMatch) {
-        const pos = doc.positionAt(tsMatch.index);
-        this.outputChannel.appendLine(`Found timestamps at ${fileUri.fsPath}:${pos.line}`);
-        return new vscode.Location(fileUri, pos);
-      }
-    }
-
-    this.outputChannel.appendLine(`Field "${fieldName}" not found in ${fileUri.fsPath}`);
-    return undefined;
   }
 }
