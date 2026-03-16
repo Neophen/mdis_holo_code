@@ -2,7 +2,7 @@
   "name": "vscode-hologram",
   "displayName": "Hologram",
   "description": "Syntax highlighting and Go to Definition for the Hologram framework template language",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "MDIS",
   "license": "MIT",
   "repository": {
