@@ -20,10 +20,9 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "preversion": "npm run compile",
-    "version": "node scripts/generate-changelog.js && git add CHANGELOG.md",
-    "postversion": "git push && git push --tags && gh release create v$(node -p \"require('./package.json').version\") --notes \"$(node scripts/extract-changelog.js)\"",
-    "release": "git add -A && git diff --cached --quiet || git commit -m \"$(node scripts/generate-commit-message.js)\" && npm version ${npm_config_bump:-patch}"
+    "release": "node scripts/release.js patch",
+    "release:minor": "node scripts/release.js minor",
+    "release:major": "node scripts/release.js major"
   },
   "devDependencies": {
     "@types/vscode": "^1.75.0",

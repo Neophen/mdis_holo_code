@@ -1,47 +1,30 @@
 # Changelog
 
-Here's the changelog entry for v0.4.8:
-
-```markdown
 ## 0.4.8
 
 ### Improvements
 
-- **Automated release workflow**: The `npm run release` command now uses Claude AI (Haiku) to auto-generate conventional commit messages from staged changes, replacing manual commit message writing.
-- **Improved changelog extraction**: Release notes extraction now handles multiple changelog header formats (`## 0.4.8`, `## [0.4.8]`, `## v0.4.8`) for more robust GitHub release creation.
-- **Fixed GitHub release creation**: The `postversion` script now correctly resolves the version number dynamically when creating GitHub releases.
-```
+- Automated release workflow with AI-generated commit messages and changelogs
+- Release notes extraction handles multiple header formats
+- VSIX file attached to GitHub releases as downloadable asset
 
-Looking at the diff, the changes are:
+## 0.4.7
 
-1. Removed explicit `activationEvents` from `package.json` (VS Code infers these automatically now)
-2. Replaced the manual `release` script with proper `preversion`/`version`/`postversion` lifecycle hooks
-3. Added `scripts/generate-changelog.js` and `scripts/extract-changelog.js` for automated changelog generation
-4. Updated `.github/workflows/publish.yml`
-
-Here's the changelog entry for v0.4.7:
-
----
-
-## [0.4.7]
-
-### Changed
-- Removed explicit `activationEvents` from `package.json`; VS Code now infers activation from language contributions automatically
-- Improved release workflow: replaced manual `release` script with npm lifecycle hooks (`preversion`, `version`, `postversion`) for automated changelog generation and publishing
+- Removed explicit `activationEvents` — VS Code infers these automatically
+- Replaced manual release script with npm lifecycle hooks for automated releases
 
 ## 0.4.6
 
 ### New Features
 
-- **"Hologram: Create Mix Tasks" command** (Cmd+Shift+P) — scaffolds `mix hologram.introspect` into your Elixir project for accurate runtime introspection of pages, components, props, actions, commands, and Ash resources
+- **"Hologram: Create Mix Tasks" command** (Cmd+Shift+P) — scaffolds `mix hologram.introspect` into your Elixir project for runtime introspection of pages, components, props, actions, and commands
 - **Watch mode** — run `mix hologram.introspect --watch` alongside `phx.server` to auto-update editor data on recompile
-- **`.hologram.json` file watcher** — extension automatically picks up introspected data and merges it into the workspace index, overriding regex-detected fields with accurate compiled metadata
+- **`.hologram.json` file watcher** — extension picks up introspected data and merges it into the workspace index
 
 ### Improvements
 
-- Simplified field resolution — removed fragile map literal and defstruct inference, kept Ash resource scanning
-- Workspace index now supports `actions` and `commands` on module entries
-- Added `.hologram.json` to `.gitignore` when scaffolding the Mix task
+- Simplified field resolution — removed fragile map/struct inference, kept Ash resource scanning
+- Workspace index supports `actions` and `commands` on module entries
 
 ## 0.4.4
 
@@ -51,7 +34,7 @@ Here's the changelog entry for v0.4.7:
 
 ## 0.4.3
 
-- Fixed `.vscodeignore` to exclude `.claude/`, `.github/`, `.tool-versions` from VSIX
+- Fixed `.vscodeignore` to exclude dev files from VSIX
 - Updated GitHub Actions to Node LTS and actions v5
 - Fixed Open VSX publish command
 
@@ -59,50 +42,28 @@ Here's the changelog entry for v0.4.7:
 
 ### New Features
 
-**Intelligent Autocomplete**
-- Event type completions (`$click`, `$change`, etc.) triggered by typing `$` in HTML tags, sorted by usage frequency
-- Action/command completions after event binding `=` — detects params usage and picks the right syntax (text, shorthand, or longhand)
-- State variable and prop completions via `@` inside templates
-- Ash resource field completions via `@prop.` for typed props
-- Page module completions in `<Link to={` and `put_page()` calls
-
-**Diagnostics & Quick Fixes**
-- Warning on unknown Ash resource fields (`@place.nonexistent`) with "Did you mean?" suggestions
-- Warning on invalid page references in `to={...}` and `put_page()` with similar page suggestions
-- Warning on missing required component props
-- Warning on unknown component props with suggestions
-- Quick fix code actions to replace unknown fields/props or add missing props
-
-**Workspace Index**
-- One-time scan on activation for fast lookups across all providers
-- Incremental updates via file watcher — no more repeated full workspace scans
-- Indexes pages, components, props, Ash resource fields, and routes
-- Built-in `Hologram.UI.Link` component support
-
-**Configuration**
-- `hologram.eventTypes` — customize and reorder the event type autocomplete list
-- `hologram.customComponents` — define additional components from deps with their props
+- Event type completions (`$click`, `$change`, etc.) sorted by usage frequency
+- Action/command completions with smart syntax detection (text, shorthand, longhand)
+- State variable and prop completions via `@` in templates
+- Ash resource field completions via `@prop.`
+- Page module completions in `<Link to={` and `put_page()`
+- Diagnostics for unknown fields, invalid pages, missing/unknown component props
+- Quick fix code actions for all diagnostics
+- Shared workspace index with file watcher for fast lookups
+- Configurable event types and custom components
 
 ### Improvements
 
-- Go to Definition now works on `@prop.field` — jumps to `attribute :field` in the Ash resource
-- Go to Definition uses the workspace index for instant component/page lookups with full-scan fallback
-- All providers share a single workspace index instead of independently scanning files
+- Go to Definition for `@prop.field` — jumps to Ash resource attribute
+- All providers share a single workspace index
 
 ## 0.2.0
 
 - Go to Definition for `@variable`, `$click="action"`, `<Component>`, `to={PageModule}`, `function_call()`
-- Alias resolution including grouped syntax `alias Mod.{A, B}`
-- Configurable jump target for components (`template`, `init`, or `module`)
+- Alias resolution including grouped syntax
+- Configurable jump target for components
 
 ## 0.1.0
 
-- Initial release
-- Syntax highlighting for `.holo` template files
-- Syntax highlighting for `~HOLO` sigils in Elixir files
-- Support for Hologram control flow: `{%if}`, `{%for}`, `{%raw}`
-- Component tag highlighting (PascalCase)
-- Event binding highlighting (`$click`, `$change`, etc.)
-- Expression interpolation (`{expression}`)
-- Embedded CSS and JavaScript support
-- HTML entity recognition
+- Initial release with syntax highlighting for `.holo` files and `~HOLO` sigils
+- Hologram control flow, components, events, expressions, embedded CSS/JS
