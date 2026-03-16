@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.10
+
+### Improvements
+- **Consolidated providers** – refactored definition, completion, and diagnostics to leverage workspace index for improved accuracy and performance
+- **Enhanced Mix scaffolding** – improved Mix task template detection and formatting
+- Removed `hologram.customComponents` configuration setting (no longer needed)
+
 ## 0.4.9
 
 ### Improvements
