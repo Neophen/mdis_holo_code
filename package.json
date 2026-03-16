@@ -34,6 +34,12 @@
     "typescript": "^5.0.0"
   },
   "contributes": {
+    "commands": [
+      {
+        "command": "hologram.createMixTasks",
+        "title": "Hologram: Create Mix Tasks"
+      }
+    ],
     "configuration": {
       "title": "Hologram",
       "properties": {

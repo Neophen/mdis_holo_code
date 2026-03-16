@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0
+
+### New Features
+
+- **"Hologram: Create Mix Tasks" command** (Cmd+Shift+P) — scaffolds `mix hologram.introspect` into your Elixir project for accurate runtime introspection of pages, components, props, actions, commands, and Ash resources
+- **Watch mode** — run `mix hologram.introspect --watch` alongside `phx.server` to auto-update editor data on recompile
+- **`.hologram.json` file watcher** — extension automatically picks up introspected data and merges it into the workspace index, overriding regex-detected fields with accurate compiled metadata
+
+### Improvements
+
+- Simplified field resolution — removed fragile map literal and defstruct inference, kept Ash resource scanning
+- Workspace index now supports `actions` and `commands` on module entries
+- Added `.hologram.json` to `.gitignore` when scaffolding the Mix task
+
 ## 0.4.4
 
 - Added extension icon to VS Code Marketplace and Open VSX

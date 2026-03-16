@@ -7,7 +7,9 @@ export interface ModuleInfo {
   kind: 'page' | 'component' | 'module';
   route?: string;
   props: { name: string; type: string; hasDefault: boolean }[];
-  fields: string[];  // Ash attributes, struct fields
+  fields: string[];
+  actions?: string[];
+  commands?: string[];
   templateLine?: number;
   initLine?: number;
 }
@@ -76,6 +78,15 @@ export class WorkspaceIndex implements vscode.Disposable {
         }
       })
     );
+
+    // Watch for .hologram.json (written by mix hologram.introspect)
+    const jsonWatcher = vscode.workspace.createFileSystemWatcher('**/.hologram.json');
+    jsonWatcher.onDidCreate(uri => this.loadIntrospectionFile(uri));
+    jsonWatcher.onDidChange(uri => this.loadIntrospectionFile(uri));
+    this.disposables.push(jsonWatcher);
+
+    // Try to load existing .hologram.json on startup
+    this.loadExistingIntrospectionFiles();
   }
 
   private registerBuiltinComponents(): void {
@@ -333,4 +344,116 @@ export class WorkspaceIndex implements vscode.Disposable {
       this._onDidUpdate.fire();
     }, 100);
   }
+
+  // --- .hologram.json introspection ---
+
+  private async loadExistingIntrospectionFiles(): Promise<void> {
+    const files = await vscode.workspace.findFiles('.hologram.json', '**/node_modules/**');
+    for (const uri of files) {
+      await this.loadIntrospectionFile(uri);
+    }
+  }
+
+  private async loadIntrospectionFile(uri: vscode.Uri): Promise<void> {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      const text = Buffer.from(bytes).toString('utf8');
+      const data = JSON.parse(text) as IntrospectionData;
+
+      this.mergeIntrospectionData(data);
+      this.fireUpdate();
+    } catch {
+      // Invalid JSON or read error — ignore silently
+    }
+  }
+
+  private mergeIntrospectionData(data: IntrospectionData): void {
+    // Merge Ash resource fields
+    if (data.resources) {
+      for (const [moduleName, info] of Object.entries(data.resources)) {
+        const existing = this.modules.get(moduleName);
+        if (existing) {
+          // Override regex-detected fields with introspected ones
+          existing.fields = [
+            ...info.attributes.map(a => typeof a === 'string' ? a : a.name),
+            ...info.relationships.map(r => typeof r === 'string' ? r : r.name),
+          ];
+        } else {
+          // Create a synthetic entry for resources not found by regex scan
+          this.modules.set(moduleName, {
+            fullName: moduleName,
+            uri: vscode.Uri.parse(`hologram-introspected:${moduleName}`),
+            defmoduleLine: 0,
+            kind: 'module',
+            props: [],
+            fields: [
+              ...info.attributes.map(a => typeof a === 'string' ? a : a.name),
+              ...info.relationships.map(r => typeof r === 'string' ? r : r.name),
+            ],
+            templateLine: undefined,
+            initLine: undefined,
+          });
+        }
+      }
+    }
+
+    // Merge Hologram pages
+    if (data.pages) {
+      for (const [moduleName, info] of Object.entries(data.pages)) {
+        const existing = this.modules.get(moduleName);
+        if (existing) {
+          existing.kind = 'page';
+          if (info.route) existing.route = info.route;
+          if (info.props && info.props.length > 0) {
+            existing.props = info.props.map(p => ({
+              name: typeof p === 'string' ? p : p.name,
+              type: (typeof p !== 'string' && p.type) || 'any',
+              hasDefault: typeof p !== 'string' ? !p.required : false,
+            }));
+          }
+          if (info.actions) existing.actions = info.actions;
+          if (info.commands) existing.commands = info.commands;
+        }
+      }
+    }
+
+    // Merge Hologram components
+    if (data.components) {
+      for (const [moduleName, info] of Object.entries(data.components)) {
+        const existing = this.modules.get(moduleName);
+        if (existing) {
+          existing.kind = 'component';
+          if (info.props && info.props.length > 0) {
+            existing.props = info.props.map(p => ({
+              name: typeof p === 'string' ? p : p.name,
+              type: (typeof p !== 'string' && p.type) || 'any',
+              hasDefault: typeof p !== 'string' ? !p.required : false,
+            }));
+          }
+          if (info.actions) existing.actions = info.actions;
+          if (info.commands) existing.commands = info.commands;
+        }
+      }
+    }
+  }
+}
+
+// Types for .hologram.json data
+interface IntrospectionData {
+  resources?: Record<string, {
+    attributes: (string | { name: string; type?: string; primary_key?: boolean })[];
+    relationships: (string | { name: string; type?: string; destination?: string })[];
+  }>;
+  pages?: Record<string, {
+    route?: string;
+    props?: (string | { name: string; type?: string; required?: boolean })[];
+    actions?: string[];
+    commands?: string[];
+  }>;
+  components?: Record<string, {
+    props?: (string | { name: string; type?: string; required?: boolean })[];
+    actions?: string[];
+    commands?: string[];
+  }>;
+  timestamp?: string;
 }

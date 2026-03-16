@@ -112,6 +112,18 @@ The extension builds a workspace index on activation for fast lookups:
 - Indexes: pages, components, props, Ash resource fields, routes
 - Shared across all providers for consistent, fast results
 
+### Mix Introspection (Optional)
+
+For the most accurate data, scaffold a Mix task into your project:
+
+1. Open Command Palette (`Cmd+Shift+P`)
+2. Run **"Hologram: Create Mix Tasks"**
+3. Choose "Run once" or "Run in watch mode"
+
+This creates `lib/mix/tasks/hologram.introspect.ex` which uses Hologram's compiled module metadata to output a `.hologram.json` file. The extension watches this file and merges the introspected data into the workspace index — overriding regex results with accurate runtime data.
+
+**Watch mode** (`mix hologram.introspect --watch`) re-introspects every 3 seconds on recompile, ideal for running alongside `mix phx.server`.
+
 ## Configuration
 
 | Setting | Default | Description |
