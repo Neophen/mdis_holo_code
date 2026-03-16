@@ -1,5 +1,22 @@
 # Changelog
 
+Looking at the diff, the changes are:
+
+1. Removed explicit `activationEvents` from `package.json` (VS Code infers these automatically now)
+2. Replaced the manual `release` script with proper `preversion`/`version`/`postversion` lifecycle hooks
+3. Added `scripts/generate-changelog.js` and `scripts/extract-changelog.js` for automated changelog generation
+4. Updated `.github/workflows/publish.yml`
+
+Here's the changelog entry for v0.4.7:
+
+---
+
+## [0.4.7]
+
+### Changed
+- Removed explicit `activationEvents` from `package.json`; VS Code now infers activation from language contributions automatically
+- Improved release workflow: replaced manual `release` script with npm lifecycle hooks (`preversion`, `version`, `postversion`) for automated changelog generation and publishing
+
 ## 0.4.6
 
 ### New Features
