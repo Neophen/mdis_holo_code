@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.11
+
+### Improvements
+- Optimized **logo** asset and removed legacy SVG variant
+- Simplified release tooling
+
 ## 0.4.10
 
 ### Improvements

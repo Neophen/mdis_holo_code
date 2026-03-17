@@ -2,7 +2,7 @@
   "name": "vscode-hologram",
   "displayName": "Hologram",
   "description": "Syntax highlighting, intelligent autocomplete, diagnostics, and Go to Definition for the Hologram framework",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "publisher": "MDIS",
   "license": "MIT",
   "icon": "assets/logo.png",
