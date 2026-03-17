@@ -6,7 +6,6 @@ import { PageCompletionProvider, PageDiagnosticsProvider } from './pageCompletio
 import { FieldDiagnosticsProvider } from './fieldDiagnosticsProvider';
 import { FieldCodeActionProvider } from './fieldCodeActionProvider';
 import { ComponentPropsDiagnosticsProvider } from './componentPropsDiagnosticsProvider';
-import { createMixTask } from './mixTaskScaffolder';
 
 export async function activate(context: vscode.ExtensionContext) {
   const outputChannel = vscode.window.createOutputChannel('Hologram');
@@ -64,11 +63,6 @@ export async function activate(context: vscode.ExtensionContext) {
   // Component props diagnostics — missing/unknown props
   const componentPropsDiagnostics = new ComponentPropsDiagnosticsProvider(outputChannel, index);
   context.subscriptions.push(componentPropsDiagnostics);
-
-  // Commands
-  context.subscriptions.push(
-    vscode.commands.registerCommand('hologram.createMixTasks', createMixTask)
-  );
 }
 
 export function deactivate() {}

@@ -1,14 +1,14 @@
 {
-  "name": "vscode-hologram",
-  "displayName": "Hologram",
-  "description": "Syntax highlighting, intelligent autocomplete, diagnostics, and Go to Definition for the Hologram framework",
+  "name": "holo-code",
+  "displayName": "Holo Dev",
+  "description": "Syntax highlighting, intelligent autocomplete, diagnostics, and jump to Definition for the Hologram framework (Unofficial)",
   "version": "0.4.11",
   "publisher": "MDIS",
   "license": "MIT",
   "icon": "assets/logo.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Neophen/vscode-hologram"
+    "url": "https://github.com/Neophen/mdis_holo_code"
   },
   "engines": {
     "vscode": "^1.75.0"
@@ -19,10 +19,7 @@
   "main": "./out/extension.js",
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "release": "node scripts/release.js patch",
-    "release:minor": "node scripts/release.js minor",
-    "release:major": "node scripts/release.js major"
+    "watch": "tsc -watch -p ./"
   },
   "devDependencies": {
     "@types/vscode": "^1.75.0",
@@ -32,14 +29,8 @@
     "typescript": "^5.0.0"
   },
   "contributes": {
-    "commands": [
-      {
-        "command": "hologram.createMixTasks",
-        "title": "Hologram: Create Mix Tasks"
-      }
-    ],
     "configuration": {
-      "title": "Hologram",
+      "title": "Holo Dev - Unofficial Hologram Extension",
       "properties": {
         "hologram.defaultJumpTarget": {
           "type": "string",

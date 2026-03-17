@@ -5,7 +5,7 @@ Proposal: Mix task for IDE introspection of pages, components, and their metadat
 
 ## Summary
 
-I'm building [a VS Code/Cursor extension for Hologram](https://github.com/Neophen/vscode-hologram) and I've hit the limits of what static regex parsing can do for editor features like autocomplete, diagnostics, and go-to-definition.
+I'm building [a VS Code/Cursor extension for Hologram](https://github.com/Neophen/mdis_holo_code) and I've hit the limits of what static regex parsing can do for editor features like autocomplete, diagnostics, and go-to-definition.
 
 I'd like to propose shipping a `mix hologram.introspect` task with Hologram that outputs structured JSON about the project's pages, components, and their metadata. This would enable any editor tooling to provide rich, accurate IntelliSense without reimplementing Elixir parsing.
 
@@ -65,7 +65,7 @@ The task would use Hologram's compiled module metadata:
 
 The extension watches `.hologram.json` for changes. When the file updates (from watch mode or manual run), the editor instantly picks up the new metadata — no restart needed.
 
-I've prototyped this in my extension: [mixTaskScaffolder.ts](https://github.com/Neophen/vscode-hologram/blob/main/src/mixTaskScaffolder.ts). Currently the extension scaffolds the Mix task into the user's project via a command, but shipping it with Hologram would be much better because:
+I've prototyped this in my extension: [mixTaskScaffolder.ts](https://github.com/Neophen/mdis_holo_code/blob/main/src/mixTaskScaffolder.ts). Currently the extension scaffolds the Mix task into the user's project via a command, but shipping it with Hologram would be much better because:
 
 1. **No scaffolding step** — it just works
 2. **Could hook into compilation callbacks** instead of polling

@@ -4,9 +4,9 @@
 
 # Hologram for VS Code
 
-[![Version](https://img.shields.io/visual-studio-marketplace/v/MDIS.vscode-hologram?label=version)](https://marketplace.visualstudio.com/items?itemName=MDIS.vscode-hologram)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/MDIS.vscode-hologram)](https://marketplace.visualstudio.com/items?itemName=MDIS.vscode-hologram)
-[![License](https://img.shields.io/github/license/Neophen/vscode-hologram)](LICENSE)
+[![Version](https://img.shields.io/visual-studio-marketplace/v/MDIS.holo-code?label=version)](https://marketplace.visualstudio.com/items?itemName=MDIS.holo-code)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/MDIS.holo-code)](https://marketplace.visualstudio.com/items?itemName=MDIS.holo-code)
+[![License](https://img.shields.io/github/license/Neophen/mdis_holo_code)](LICENSE)
 
 Syntax highlighting, intelligent autocomplete, diagnostics, and Go to Definition for the [Hologram](https://hologram.page/) framework.
 
@@ -14,17 +14,17 @@ Syntax highlighting, intelligent autocomplete, diagnostics, and Go to Definition
 
 ### VS Code
 
-Search for **"Hologram"** in the Extensions panel, or [install from Marketplace](https://marketplace.visualstudio.com/items?itemName=MDIS.vscode-hologram).
+Search for **"Hologram"** in the Extensions panel, or [install from Marketplace](https://marketplace.visualstudio.com/items?itemName=MDIS.holo-code).
 
 ### Cursor / Open VSX
 
-Search for **"Hologram"** in Cursor's Extensions panel, or [install from Open VSX](https://open-vsx.org/extension/MDIS/vscode-hologram).
+Search for **"Hologram"** in Cursor's Extensions panel, or [install from Open VSX](https://open-vsx.org/extension/MDIS/holo-code).
 
 ### Manual Install (VSIX)
 
 If the extension isn't showing in your editor's marketplace yet:
 
-1. Download the latest `.vsix` file from [GitHub Releases](https://github.com/Neophen/vscode-hologram/releases/latest)
+1. Download the latest `.vsix` file from [GitHub Releases](https://github.com/Neophen/mdis_holo_code/releases/latest)
 2. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
 3. Run **"Extensions: Install from VSIX..."**
 4. Select the downloaded `.vsix` file
