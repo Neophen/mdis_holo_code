@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.15
+
+### New Features
+- **Extension** now activates on Elixir language files
+
 ## 0.4.13
 
 ### Improvements

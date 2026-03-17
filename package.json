@@ -2,7 +2,7 @@
   "name": "holo-code",
   "displayName": "Holo Dev",
   "description": "Syntax highlighting, intelligent autocomplete, diagnostics, and jump to Definition for the Hologram framework (Unofficial)",
-  "version": "0.4.14",
+  "version": "0.4.15",
   "publisher": "MDIS",
   "license": "MIT",
   "icon": "assets/logo.png",
