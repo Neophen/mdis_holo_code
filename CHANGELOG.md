@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.13
+
+### Improvements
+- Migrate to **mdis_holo_dev** dependency
+
 ## 0.4.12
 
 ### Improvements
