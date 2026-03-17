@@ -16,6 +16,9 @@
   "categories": [
     "Programming Languages"
   ],
+  "activationEvents": [
+    "onLanguage:elixir"
+  ],
   "main": "./out/extension.js",
   "scripts": {
     "compile": "tsc -p ./",

@@ -8,7 +8,7 @@ import { FieldCodeActionProvider } from './fieldCodeActionProvider';
 import { ComponentPropsDiagnosticsProvider } from './componentPropsDiagnosticsProvider';
 
 export async function activate(context: vscode.ExtensionContext) {
-  const outputChannel = vscode.window.createOutputChannel('Hologram');
+  const outputChannel = vscode.window.createOutputChannel('HoloDev');
 
   // Create and initialize the shared workspace index
   const index = new WorkspaceIndex();
